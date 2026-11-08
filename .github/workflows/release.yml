@@ -7,6 +7,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish, e.g. v0.1.0. Leave empty to build artifacts only."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -31,7 +36,9 @@ jobs:
             key: linux-arm64
             exe: ""
             archive: tar
-          - os: macos-14
+          # macos-latest is the Apple silicon image. Do not pin an older label here:
+          # macos-14 silently matched no runner and cancelled the whole release.
+          - os: macos-latest
             key: darwin-arm64
             exe: ""
             archive: tar
@@ -70,10 +77,11 @@ jobs:
         env:
           KEY: ${{ matrix.key }}
           ARCHIVE_KIND: ${{ matrix.archive }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          if [ "${version}" = "${GITHUB_REF_NAME}" ]; then
-            # workflow_dispatch has no tag; keep the artifact name predictable
+          version="${TAG#v}"
+          if [ "${version}" = "${TAG}" ]; then
+            # A dispatch or branch build has no version tag; name the assets predictably
             version="0.0.0-dev"
           fi
           asset="lode-${version}-${KEY}"
@@ -96,7 +104,11 @@ jobs:
 
   release:
     needs: build
+    # A dispatch with no tag proves the builds without publishing anything.
+    if: github.event_name == 'push' || inputs.tag != ''
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -120,7 +132,7 @@ jobs:
         run: |
           {
             echo "Standalone builds. Each archive contains a directory named \`lode\`;"
-            echo "install with \`curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/install.sh | sh\`."
+            echo "install with \`curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh | sh\`."
             echo
             echo "The embedding weights (~67 MB) are downloaded on first use, not bundled."
           } > notes.md
@@ -129,11 +141,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" dist-assets/* --clobber
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" dist-assets/* --clobber
           else
-            gh release create "${GITHUB_REF_NAME}" \
-              --title "lode ${GITHUB_REF_NAME}" \
+            gh release create "${TAG}" \
+              --title "lode ${TAG}" \
               --notes-file notes.md \
               dist-assets/*
           fi
