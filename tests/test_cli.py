@@ -218,16 +218,38 @@ def test_unfetchable_weights_are_reported_not_crashed(sample_project, capsys, mo
     """
 
     class NoWeights(FakeEmbedder):
-        def prepare(self, quiet: bool = False):
-            raise cli.modelsource.ModelUnavailable("no mirror reachable\nretry exhausted")
+        def prepare(self, quiet: bool = False, force: bool = False):
+            raise cli.modelsource.ModelUnavailable(
+                "could not fetch tokenizer.json for BAAI/bge-small-en-v1.5\n"
+                "https://hf-mirror.com/x: <urlopen error timed out>\n"
+                "https://huggingface.co/x: RemoteDisconnected"
+            )
 
     monkeypatch.setattr(cli.embedder, "Embedder", lambda *a, **k: NoWeights())
     assert run("index", str(sample_project), "-n", "demo") == 0
     out = capsys.readouterr().out
     assert "could not fetch weights" in out
-    assert "no mirror reachable" in out
+    assert "could not fetch tokenizer.json for BAAI/bge-small-en-v1.5" in out
     assert "keyword-only" in out
     assert "AttributeError" not in out
+
+
+def test_model_download_shares_which_mirrors_failed(capsys, monkeypatch):
+    """The one command meant for debugging a fetch must not hide the reasons."""
+
+    class NoWeights(FakeEmbedder):
+        def prepare(self, quiet: bool = False, force: bool = False):
+            raise cli.modelsource.ModelUnavailable(
+                "could not fetch tokenizer.json for BAAI/bge-small-en-v1.5\n"
+                "https://hf-mirror.com/x: <urlopen error timed out>\n"
+                "https://huggingface.co/x: RemoteDisconnected"
+            )
+
+    monkeypatch.setattr(cli.embedder, "Embedder", lambda *a, **k: NoWeights())
+    assert run("model", "download") == 4
+    out = capsys.readouterr().out
+    assert "hf-mirror" in out and "RemoteDisconnected" in out
+    assert "LODE_MIRRORS" in out
 
 
 def test_doctor_explains_the_setup(indexed, capsys):

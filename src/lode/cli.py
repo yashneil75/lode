@@ -168,8 +168,14 @@ def index_command(
                     f"  weights ready: {info.mb:g} MB, {info.dim} dims", style="dim"
                 )
             except modelsource.ModelUnavailable as exc:
-                console.print(f"  [yellow]could not fetch weights:[/] {_first_line(str(exc))}")
-                console.print("  continuing with keyword-only ranking (BM25).")
+                # The mirror errors are the actionable part: on a first index they tell
+                # you whether to wait for the network or set LODE_MIRRORS.
+                console.print("  [yellow]could not fetch weights:[/]")
+                console.print(Text(_indented(_model_failure(exc, limit=2)), style="dim"))
+                console.print(
+                    "  continuing with keyword-only ranking (BM25)."
+                    " [bold]lode model download[/bold] retries the whole chain."
+                )
 
         started = time.time()
         report = indexer.build(
@@ -510,7 +516,7 @@ def model_download(
     try:
         info = embedder.Embedder(wanted).prepare(force=force)
     except modelsource.ModelUnavailable as exc:
-        console.print(f"[red]{_first_line(str(exc))}[/red]")
+        console.print(Text(_model_failure(exc), style="red"))
         console.print(
             "  behind a network filter? set [bold]LODE_MIRRORS[/bold] to a reachable host, e.g.\n"
             "  LODE_MIRRORS=https://hf-mirror.com/{repo}/resolve/{rev}/{path}"
@@ -589,6 +595,26 @@ def version_command() -> None:
 def _first_line(text: str) -> str:
     lines = [line for line in (text or "").splitlines() if line.strip()]
     return lines[0][:200] if lines else "unknown error"
+
+
+def _model_failure(exc: Exception, limit: int = 3) -> str:
+    """The headline plus the mirror errors behind it.
+
+    `could not fetch tokenizer.json` alone is useless to debug: which host failed, and
+    with what, is the information that decides whether it is a proxy, a DNS problem or a
+    bad mirror.
+    """
+    lines = [line.strip() for line in str(exc).splitlines() if line.strip()]
+    if not lines:
+        return "unknown error"
+    head, rest = lines[0][:200], lines[1 : 1 + limit]
+    return head + ("\n" + "\n".join(_indented(line[:200]) for line in rest) if rest else "")
+
+
+def _indented(text: str, spaces: int = 2) -> str:
+    """Shift every line right, so a detail block reads as part of the line above it."""
+    pad = " " * spaces
+    return "\n".join(pad + line for line in text.splitlines())
 
 
 def _configure_streams() -> None:

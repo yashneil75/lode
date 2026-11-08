@@ -18,6 +18,11 @@ htmlcov/
 # lode's own scratch state: indexes and downloaded weights
 .lodehome/
 
+# Local rehearsal of the release pipeline: staged archives and a fake home
+.smoke/
+.smoke.ps1
+.smokehome/
+
 # Editors
 .vscode/
 .idea/

@@ -191,7 +191,7 @@ vectors in the same SQLite file on your disk, and ranks with both.
 ```sh
 git clone https://github.com/yashneil75/lode && cd lode
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"
-pytest                                    # 127 tests, no network, no model
+pytest                                    # hermetic: no network, no model needed
 pyinstaller --noconfirm lode.spec         # -> dist/lode/lode
 ```
 

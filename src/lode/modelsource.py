@@ -24,7 +24,9 @@ from . import paths
 MANIFEST = "lode-model.json"
 _MIRROR_KEY = "LODE_MIRRORS"
 _TIMEOUT = float(os.environ.get("LODE_DOWNLOAD_TIMEOUT", "60"))
-_RETRIES = int(os.environ.get("LODE_DOWNLOAD_RETRIES", "3"))
+# The side-car files are a few KB each and the mirrors reset small follow-up requests
+# often enough that three attempts regularly gives up on a working host.
+_RETRIES = int(os.environ.get("LODE_DOWNLOAD_RETRIES", "6"))
 _CHUNK = 1 << 16
 
 Progress = Callable[[str, int, int], None]
@@ -180,7 +182,7 @@ def _fetch(url: str, dest: Path) -> None:
                 total = int(response.headers.get("Content-Length") or 0)
                 done = 0
                 with tmp.open("wb") as handle:
-                    while True:
+                    while not (total and done >= total):
                         block = response.read(_CHUNK)
                         if not block:
                             break
@@ -188,6 +190,10 @@ def _fetch(url: str, dest: Path) -> None:
                         done += len(block)
                         if total:
                             _notify(url, done, total)
+            if total and done < total:
+                # A mirror that hangs up mid-body is a retry, not a verdict: the next
+                # host in the chain may serve the rest.
+                raise OSError(f"stream ended at {done} of {total} bytes")
             tmp.replace(dest)
             return
         except (urllib.error.URLError, OSError, ValueError) as exc:
@@ -195,7 +201,7 @@ def _fetch(url: str, dest: Path) -> None:
             if tmp.exists():
                 tmp.unlink(missing_ok=True)
             if attempt < _RETRIES:
-                time.sleep(0.5 * 2 ** (attempt - 1))
+                time.sleep(min(4.0, 0.5 * 2 ** (attempt - 1)))
     raise ModelUnavailable(f"{url}: {last_error}")
 
 

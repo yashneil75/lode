@@ -6,9 +6,98 @@ predicate, not by fetching weights.
 
 from __future__ import annotations
 
+import urllib.error
+import urllib.request
+
 import pytest
 
 from lode import modelsource
+
+
+def test_a_flaky_mirror_is_retried_until_it_answers(monkeypatch, tmp_path):
+    """Small side-car requests get reset often enough that one try is not a plan."""
+    attempts = []
+    slept = []
+
+    class Response:
+        """Answers once with three bytes, then EOF, like a real body would."""
+
+        headers = {"Content-Length": "3"}
+
+        def __init__(self) -> None:
+            self.body = [b"abc"]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self, _size):
+            return self.body.pop(0) if self.body else b""
+
+    def fake_urlopen(request, timeout=None):
+        attempts.append(request.full_url)
+        if len(attempts) < 3:
+            raise urllib.error.URLError("connection reset by peer")
+        return Response()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(modelsource.time, "sleep", lambda seconds: slept.append(seconds))
+
+    dest = tmp_path / "tokenizer.json"
+    modelsource._fetch("https://example.test/tokenizer.json", dest)
+    assert dest.read_bytes() == b"abc"
+    assert len(attempts) == 3
+    assert len(slept) == 2, "backoff between attempts, not a busy loop"
+
+
+def test_giving_up_names_the_url_that_failed(monkeypatch, tmp_path):
+    def fake_urlopen(request, timeout=None):
+        raise urllib.error.URLError("connection reset by peer")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(modelsource.time, "sleep", lambda seconds: None)
+
+    with pytest.raises(modelsource.ModelUnavailable) as caught:
+        modelsource._fetch("https://example.test/tokenizer.json", tmp_path / "nope.json")
+    assert "https://example.test/tokenizer.json" in str(caught.value)
+
+
+def test_a_truncated_body_is_not_accepted_as_a_weight_file(monkeypatch, tmp_path):
+    """Content-Length is a contract, and a partial file is not a usable tokenizer.
+
+    The mirror used to stop mid-body and lode renamed whatever arrived into the cache, so
+    the index looked ready and embedded nothing.
+    """
+    slept = []
+
+    class ShortResponse:
+        headers = {"Content-Length": "100"}
+
+        def __init__(self) -> None:
+            self.left = 10
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self, _size):
+            block = b"x" * min(_size, self.left)
+            self.left -= len(block)
+            return block
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout=None: ShortResponse())
+    monkeypatch.setattr(modelsource.time, "sleep", lambda seconds: slept.append(seconds))
+
+    dest = tmp_path / "tokenizer.json"
+    with pytest.raises(modelsource.ModelUnavailable) as caught:
+        modelsource._fetch("https://example.test/tokenizer.json", dest)
+    assert "10 of 100" in str(caught.value)
+    assert not dest.exists(), "a half file must not land in the cache"
+    assert slept, "a short read is retried before it is reported"
 
 
 def test_the_tokenizer_config_counts_as_required_not_optional():
