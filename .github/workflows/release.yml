@@ -141,10 +141,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" dist-assets/* --clobber
+          # --repo because this job checks out nothing: without a .git directory gh
+          # cannot infer which repository the release belongs to.
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" dist-assets/* --repo "${GITHUB_REPOSITORY}" --clobber
           else
-            gh release create "${TAG}" \
+            gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" \
               --title "lode ${TAG}" \
               --notes-file notes.md \
               dist-assets/*
