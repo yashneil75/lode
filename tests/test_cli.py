@@ -210,6 +210,26 @@ def test_no_embed_still_searches(sample_project, capsys):
     assert "src/auth.py" in capsys.readouterr().out
 
 
+def test_unfetchable_weights_are_reported_not_crashed(sample_project, capsys, monkeypatch):
+    """The first run on a machine with no route to a mirror must still produce an index.
+
+    The handler formatted the exception as if it were a string, so the fallback path
+    died with AttributeError instead of saying what went wrong.
+    """
+
+    class NoWeights(FakeEmbedder):
+        def prepare(self, quiet: bool = False):
+            raise cli.modelsource.ModelUnavailable("no mirror reachable\nretry exhausted")
+
+    monkeypatch.setattr(cli.embedder, "Embedder", lambda *a, **k: NoWeights())
+    assert run("index", str(sample_project), "-n", "demo") == 0
+    out = capsys.readouterr().out
+    assert "could not fetch weights" in out
+    assert "no mirror reachable" in out
+    assert "keyword-only" in out
+    assert "AttributeError" not in out
+
+
 def test_doctor_explains_the_setup(indexed, capsys):
     assert run("doctor") == 0
     assert "demo" in capsys.readouterr().out

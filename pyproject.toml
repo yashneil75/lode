@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lode-code-search"
-version = "0.1.0"
+version = "0.1.1"
 description = "Semantic + keyword search over your codebases, as one small binary."
 readme = "README.md"
 requires-python = ">=3.10"

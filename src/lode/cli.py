@@ -168,7 +168,7 @@ def index_command(
                     f"  weights ready: {info.mb:g} MB, {info.dim} dims", style="dim"
                 )
             except modelsource.ModelUnavailable as exc:
-                console.print(f"  [yellow]could not fetch weights:[/] {_first_line(exc)}")
+                console.print(f"  [yellow]could not fetch weights:[/] {_first_line(str(exc))}")
                 console.print("  continuing with keyword-only ranking (BM25).")
 
         started = time.time()

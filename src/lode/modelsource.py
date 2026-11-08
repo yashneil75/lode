@@ -52,10 +52,11 @@ class ModelSpec:
         return f"{self.hf_repo.replace('/', '--')}-{self.revision}"
 
 
-# Files every ONNX sentence model needs alongside its weights.
-_SIDE_CAR_REQUIRED = ("config.json", "tokenizer.json")
+# Files every ONNX sentence model needs alongside its weights. tokenizer_config.json is
+# not decorative: fastembed's tokenizer refuses to start without it, and an index built
+# against a cache that "looks ready" but cannot tokenize silently loses its embeddings.
+_SIDE_CAR_REQUIRED = ("config.json", "tokenizer.json", "tokenizer_config.json")
 _SIDE_CAR_OPTIONAL = (
-    "tokenizer_config.json",
     "special_tokens_map.json",
     "modules.json",
 )
