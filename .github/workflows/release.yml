@@ -1,0 +1,139 @@
+name: release
+
+# Builds a standalone binary per platform and attaches them to a GitHub Release, so
+# users can `curl` one script and get a working `lode` without Python installed.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PYINSTALLER_NO_MANIFEST: "1"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # PyInstaller builds for the machine it runs on, so every target needs its
+          # own runner. Linux stays on 22.04: the glibc there is old enough for the
+          # distros people actually run on shared servers.
+          - os: ubuntu-22.04
+            key: linux-x86_64
+            exe: ""
+            archive: tar
+          - os: ubuntu-24.04-arm
+            key: linux-arm64
+            exe: ""
+            archive: tar
+          - os: macos-14
+            key: darwin-arm64
+            exe: ""
+            archive: tar
+          - os: windows-latest
+            key: windows-x86_64
+            exe: ".exe"
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Tests
+        run: pytest -q
+
+      - name: Build
+        shell: bash
+        run: pyinstaller --noconfirm lode.spec
+
+      - name: Smoke test the binary
+        shell: bash
+        run: |
+          ./dist/lode/lode${{ matrix.exe }} version
+          ./dist/lode/lode${{ matrix.exe }} doctor
+
+      - name: Archive
+        shell: bash
+        env:
+          KEY: ${{ matrix.key }}
+          ARCHIVE_KIND: ${{ matrix.archive }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ "${version}" = "${GITHUB_REF_NAME}" ]; then
+            # workflow_dispatch has no tag; keep the artifact name predictable
+            version="0.0.0-dev"
+          fi
+          asset="lode-${version}-${KEY}"
+          mkdir -p out
+          if [ "${ARCHIVE_KIND}" = zip ]; then
+            # Both archive kinds keep a single `lode/` folder at the root, so the two
+            # installers and anyone unpacking by hand see the same layout.
+            (cd dist && 7z a -tzip "../out/${asset}.zip" lode)
+          else
+            tar -czf "out/${asset}.tar.gz" -C dist lode
+          fi
+          sha256sum "out/${asset}."* | awk '{print $1}' > out/checksum.txt
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.key }}
+          path: out/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: staged
+          merge-multiple: false
+
+      - name: Collect
+        run: |
+          mkdir -p dist-assets
+          find staged -type f \( -name 'lode-*.tar.gz' -o -name 'lode-*.zip' \) \
+            -exec cp -t dist-assets {} +
+          ls -l dist-assets
+
+      - name: Checksums
+        run: |
+          cd dist-assets
+          for asset in lode-*; do sha256sum "${asset}"; done > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Release notes
+        run: |
+          {
+            echo "Standalone builds. Each archive contains a directory named \`lode\`;"
+            echo "install with \`curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/install.sh | sh\`."
+            echo
+            echo "The embedding weights (~67 MB) are downloaded on first use, not bundled."
+          } > notes.md
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" dist-assets/* --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "lode ${GITHUB_REF_NAME}" \
+              --notes-file notes.md \
+              dist-assets/*
+          fi

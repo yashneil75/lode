@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+build-dir/
+dist/
+dist-dir/
+
+# Test + tool caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# lode's own scratch state: indexes and downloaded weights
+.lodehome/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
