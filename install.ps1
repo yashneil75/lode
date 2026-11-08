@@ -24,7 +24,7 @@ function Die($message) {
 $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
     "AMD64" { "x86_64" }
     "ARM64" { "arm64" }
-    default { Die "no standalone build for $env:PROCESSOR_ARCHITECTURE; install with: pip install lode-code-search" }
+    default { Die "no standalone build for $env:PROCESSOR_ARCHITECTURE; install with: pip install git+https://github.com/yashneil75/lode.git" }
 }
 Say "target windows-$arch"
 

@@ -54,11 +54,13 @@ on the [releases page](https://github.com/yashneil75/lode/releases):
 | macOS (Apple silicon) | `lode-<version>-darwin-arm64.tar.gz` |
 | Windows x86_64 | `lode-<version>-windows-x86_64.zip` |
 
-Or install from source, which needs Python 3.10+:
+Or install from source with pipx, which needs Python 3.10+:
 
 ```sh
-pipx install lode-code-search     # or: pip install lode-code-search
+pipx install git+https://github.com/yashneil75/lode.git
 ```
+
+Not on PyPI yet — the git URL is the working install path.
 
 No Intel macOS build — that machine is old enough that `pipx` is the better answer.
 

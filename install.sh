@@ -33,14 +33,14 @@ os="$(uname -s 2>/dev/null || echo unknown)"
 case "$os" in
     Linux) target_os=linux ;;
     Darwin) target_os=darwin ;;
-    *) die "no standalone build for $os. Install with: pipx install lode-code-search" ;;
+    *) die "no standalone build for $os. Install with: pipx install git+https://github.com/yashneil75/lode.git" ;;
 esac
 
 arch="$(uname -m 2>/dev/null || echo unknown)"
 case "$arch" in
     x86_64 | amd64) target_arch=x86_64 ;;
     arm64 | aarch64) target_arch=arm64 ;;
-    *) die "no standalone build for $arch. Install with: pipx install lode-code-search" ;;
+    *) die "no standalone build for $arch. Install with: pipx install git+https://github.com/yashneil75/lode.git" ;;
 esac
 
 # Apple Silicon runs x86_64 binaries under Rosetta, but we ship the arm64 build, so
@@ -52,7 +52,7 @@ if [ "$target_os" = darwin ] && [ "$target_arch" = x86_64 ]; then
 fi
 
 if [ "$target_os" = darwin ] && [ "$target_arch" = x86_64 ]; then
-    die "no Intel macOS build. Install with: pipx install lode-code-search"
+    die "no Intel macOS build. Install with: pipx install git+https://github.com/yashneil75/lode.git"
 fi
 
 # --- resolve the version --------------------------------------------------
